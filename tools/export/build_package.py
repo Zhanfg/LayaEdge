@@ -12,7 +12,11 @@ import torch
 from huggingface_hub import HfApi, snapshot_download
 from laya.agent import Agent
 from onnxruntime.quantization import QuantType, quantize_dynamic
-from onnxruntime.quantization.matmul_nbits_quantizer import (\n    DefaultWeightOnlyQuantConfig,\n    MatMulNBitsQuantizer,\n)\n
+from onnxruntime.quantization.matmul_nbits_quantizer import (
+    DefaultWeightOnlyQuantConfig,
+    MatMulNBitsQuantizer,
+)
+
 
 def export_onnx(model_id: str, output: Path) -> None:
     print(f"Loading Laya checkpoint: {model_id}")
@@ -154,13 +158,20 @@ def prepare_package(
             "sha256": sha256(path),
         }
 
+    graph = onnx.load(str(model_path), load_external_data=False)
+    onnx_opset = max(
+        item.version
+        for item in graph.opset_import
+        if item.domain in ("", "ai.onnx")
+    )
+
     manifest = {
         "schema_version": 1,
         "model_id": model_id,
         "source_revision": source_revision,
         "variant": variant,
         "format": "onnx",
-        "onnx_opset": 18,
+        "onnx_opset": onnx_opset,
         "quantization": quantization,
         "files": files,
     }
