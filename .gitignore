@@ -1,0 +1,33 @@
+# Gradle / Android
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Native / generated
+.cxx/
+.externalNativeBuild/
+
+# Model artifacts
+*.onnx
+*.ort
+*.safetensors
+*.bin
+*.gguf
+model-cache/
+models/
+dist/
+
+# Benchmark output
+benchmark/results/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local
+.DS_Store
+*.log

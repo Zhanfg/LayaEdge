@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "model_id": "laya-multilingual",
+  "variant": "int8",
+  "format": "onnx",
+  "model_file": "model.onnx",
+  "tokenizer_dir": "tokenizer",
+  "sha256": "REPLACE_WITH_MODEL_SHA256",
+  "size_bytes": 0,
+  "max_input_tokens": 1024,
+  "backends": ["cpu"],
+  "notes": "Example only. Generated model artifacts are not committed."
+}
