@@ -1,12 +1,15 @@
 package io.layaedge.app
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import io.layaedge.runtime.DecisionQuestion
 import io.layaedge.runtime.DecisionRequest
@@ -27,6 +30,7 @@ class MainActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var status: TextView
     private var runtime: LayaEdgeRuntime? = null
+    private var benchmarkReport: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +49,7 @@ class MainActivity : Activity() {
         status = TextView(this).apply {
             textSize = 15f
             setPadding(0, 28, 0, 28)
+            setTextIsSelectable(true)
         }
 
         val importButton = Button(this).apply {
@@ -65,24 +70,41 @@ class MainActivity : Activity() {
             setOnClickListener { runDecision() }
         }
 
+        val benchmarkButton = Button(this).apply {
+            text = "Run device benchmark"
+            setOnClickListener {
+                isEnabled = false
+                runBenchmark { isEnabled = true }
+            }
+        }
+
+        val copyButton = Button(this).apply {
+            text = "Copy benchmark report"
+            setOnClickListener { copyBenchmarkReport() }
+        }
+
         root.addView(title)
         root.addView(
             status,
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         )
-        root.addView(
-            importButton,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-        root.addView(
-            testButton,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
-        setContentView(root)
+        listOf(importButton, testButton, benchmarkButton, copyButton).forEach { button ->
+            root.addView(
+                button,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
 
+        val scroll = ScrollView(this).apply {
+            addView(
+                root,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+        setContentView(scroll)
         refreshStatus()
     }
 
@@ -104,6 +126,7 @@ class MainActivity : Activity() {
             }.onSuccess {
                 runtime?.close()
                 runtime = null
+                benchmarkReport = ""
                 refreshStatus()
             }.onFailure {
                 status.text = "Import failed: ${it.message}"
@@ -112,8 +135,7 @@ class MainActivity : Activity() {
     }
 
     private fun runDecision() {
-        val bundleDir = modelsRoot().resolve(MODEL_SLOT)
-        if (!bundleDir.isDirectory) {
+        val bundleDir = installedBundleDir() ?: run {
             status.text = "No model installed. Import a LayaEdge model package first."
             return
         }
@@ -122,26 +144,7 @@ class MainActivity : Activity() {
         scope.launch {
             runCatching {
                 val engine = runtime ?: createRuntime(bundleDir).also { runtime = it }
-                engine.decide(
-                    DecisionRequest(
-                        state = "用户说：应用刚刚崩溃了两次，现在是否应该优先收集诊断日志？",
-                        questions = listOf(
-                            DecisionQuestion.Choice(
-                                id = "next_action",
-                                instruction = "选择下一步最合适的动作",
-                                options = linkedMapOf(
-                                    "collect_logs" to "先收集诊断日志",
-                                    "ignore" to "暂时忽略",
-                                    "restart_only" to "只重启应用",
-                                ),
-                            ),
-                            DecisionQuestion.YesNo(
-                                id = "needs_attention",
-                                instruction = "这件事现在需要处理吗？",
-                            ),
-                        ),
-                    ),
-                )
+                engine.decide(sampleRequest())
             }.onSuccess { result ->
                 status.text = buildString {
                     appendLine("Backend: ${result.backend}")
@@ -157,6 +160,42 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun runBenchmark(onFinished: () -> Unit) {
+        val bundleDir = installedBundleDir() ?: run {
+            status.text = "No model installed. Import a LayaEdge model package first."
+            onFinished()
+            return
+        }
+
+        runtime?.close()
+        runtime = null
+        status.text = "Benchmarking CPU and NNAPI paths…"
+
+        scope.launch {
+            runCatching {
+                DeviceBenchmark(this@MainActivity, bundleDir).run()
+            }.onSuccess { report ->
+                benchmarkReport = report
+                status.text = report
+            }.onFailure {
+                status.text = "Benchmark failed: ${it.message}"
+            }
+            onFinished()
+        }
+    }
+
+    private fun copyBenchmarkReport() {
+        if (benchmarkReport.isBlank()) {
+            status.text = "Run the device benchmark first."
+            return
+        }
+
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText("LayaEdge benchmark", benchmarkReport)
+        )
+    }
+
     private fun createRuntime(bundleDir: java.io.File): LayaEdgeRuntime {
         val bundle = ModelBundle.open(bundleDir, verify = true)
         val policy = PowerPolicy(PowerMode.BALANCED)
@@ -167,12 +206,36 @@ class MainActivity : Activity() {
         return LayaEdgeRuntime(backend, policy)
     }
 
+    private fun sampleRequest() = DecisionRequest(
+        state = "用户说：应用刚刚崩溃了两次，现在是否应该优先收集诊断日志？",
+        questions = listOf(
+            DecisionQuestion.Choice(
+                id = "next_action",
+                instruction = "选择下一步最合适的动作",
+                options = linkedMapOf(
+                    "collect_logs" to "先收集诊断日志",
+                    "ignore" to "暂时忽略",
+                    "restart_only" to "只重启应用",
+                ),
+            ),
+            DecisionQuestion.YesNo(
+                id = "needs_attention",
+                instruction = "这件事现在需要处理吗？",
+            ),
+        ),
+    )
+
+    private fun installedBundleDir(): java.io.File? =
+        modelsRoot().resolve(MODEL_SLOT).takeIf {
+            it.resolve("manifest.json").isFile
+        }
+
     private fun refreshStatus() {
-        val installed = modelsRoot().resolve(MODEL_SLOT).resolve("manifest.json").isFile
-        status.text = if (installed) {
+        status.text = if (installedBundleDir() != null) {
             "Model package installed. Decisions stay on-device."
         } else {
-            "Runtime ready. Import a generated model package to start."
+            "Runtime ready. Import the downloaded GitHub artifact directly; " +
+                "the importer also understands its nested model ZIP."
         }
     }
 
