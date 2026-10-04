@@ -1,0 +1,33 @@
+name: Repository checks
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON manifests
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for path in Path(".").rglob("*.json"):
+              with path.open("r", encoding="utf-8") as f:
+                  json.load(f)
+              print("ok", path)
+          PY
+
+      - name: Reject committed model binaries
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          blocked = {".onnx", ".ort", ".safetensors", ".gguf"}
+          bad = [p for p in Path(".").rglob("*") if p.is_file() and p.suffix.lower() in blocked]
+          if bad:
+              raise SystemExit("model artifacts must not be committed: " + ", ".join(map(str, bad)))
+          PY
