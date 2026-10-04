@@ -93,6 +93,15 @@ def normalize_tokenizer_config(path: Path) -> None:
         )
 
 
+def copy_onnx_with_external_data(source: Path, package_dir: Path) -> None:
+    shutil.copy2(source, package_dir / "model.onnx")
+
+    # torch.onnx may externalize large initializers. The location is stored inside
+    # the ONNX graph, so preserve the sidecar filename next to the renamed graph.
+    for sidecar in sorted(source.parent.glob(source.name + ".data*")):
+        shutil.copy2(sidecar, package_dir / sidecar.name)
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -114,7 +123,7 @@ def prepare_package(
         shutil.rmtree(package_dir)
     package_dir.mkdir(parents=True)
 
-    shutil.copy2(model_path, package_dir / "model.onnx")
+    copy_onnx_with_external_data(model_path, package_dir)
     shutil.copy2(snapshot / "rl_agent_config.json", package_dir / "rl_agent_config.json")
     shutil.copytree(snapshot / "tokenizer", package_dir / "tokenizer")
     normalize_tokenizer_config(package_dir / "tokenizer" / "tokenizer_config.json")
