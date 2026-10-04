@@ -19,7 +19,7 @@ class LayaTokenizer(
 ) : Closeable {
     private val tokenizer = HuggingFaceTokenizer.newInstance(
         tokenizerJson,
-        tokenizerConfigJson.toString(),
+        tokenizerConfigJson,
         mapOf("addSpecialTokens" to "false"),
     )
 
