@@ -12,7 +12,7 @@ import torch
 from huggingface_hub import HfApi, snapshot_download
 from laya.agent import Agent
 from onnxruntime.quantization import QuantType, quantize_dynamic
-
+from onnxruntime.quantization.matmul_nbits_quantizer import (\n    DefaultWeightOnlyQuantConfig,\n    MatMulNBitsQuantizer,\n)\n
 
 def export_onnx(model_id: str, output: Path) -> None:
     print(f"Loading Laya checkpoint: {model_id}")
@@ -70,6 +70,22 @@ def quantize_int8(source: Path, output: Path) -> None:
         weight_type=QuantType.QInt8,
         per_channel=False,
     )
+
+
+def quantize_int4(source: Path, output: Path) -> None:
+    print("Quantizing MatMul + Gather weights to blockwise INT4")
+    model = onnx.load(str(source), load_external_data=True)
+    config = DefaultWeightOnlyQuantConfig(
+        block_size=128,
+        is_symmetric=True,
+        accuracy_level=4,
+        op_types_to_quantize=("MatMul", "Gather"),
+        quant_axes=(("MatMul", 0), ("Gather", 1)),
+        bits=4,
+    )
+    quantizer = MatMulNBitsQuantizer(model, algo_config=config)
+    quantizer.process()
+    quantizer.model.save_model_to_file(str(output), True)
 
 
 def normalize_tokenizer_config(path: Path) -> None:
@@ -188,6 +204,7 @@ def main() -> None:
     )
     parser.add_argument("--out", type=Path, default=Path("dist"))
     parser.add_argument("--skip-int8", action="store_true")
+    parser.add_argument("--skip-int4", action="store_true")
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -230,6 +247,27 @@ def main() -> None:
                 "mode": "dynamic",
                 "op_types": ["MatMul"],
                 "per_channel": False,
+                "accuracy_status": "experimental",
+            },
+        )
+
+    if not args.skip_int4:
+        int4_graph = work / "laya.int4.onnx"
+        quantize_int4(fp32_graph, int4_graph)
+        prepare_package(
+            args.out / "laya-multilingual-int4-mobile",
+            int4_graph,
+            snapshot,
+            args.model,
+            source_revision,
+            "int4-weight-only-mobile",
+            {
+                "weight_type": "int4",
+                "mode": "weight-only-blockwise",
+                "block_size": 128,
+                "symmetric": True,
+                "op_types": ["MatMul", "Gather"],
+                "accuracy_level": 4,
                 "accuracy_status": "experimental",
             },
         )

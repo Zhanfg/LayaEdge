@@ -40,12 +40,28 @@ jobs:
             --model "$MODEL_ID" \
             --fp32 dist/laya-multilingual-fp32/model.onnx \
             --int8 dist/laya-multilingual-int8/model.onnx \
+            --int4 dist/laya-multilingual-int4-mobile/model.onnx \
             --report dist/validation.json
 
       - name: Write checksums
         run: |
           cd dist
-          sha256sum laya-multilingual-fp32.zip laya-multilingual-int8.zip > SHA256SUMS
+          sha256sum \
+            laya-multilingual-fp32.zip \
+            laya-multilingual-int8.zip \
+            laya-multilingual-int4-mobile.zip > SHA256SUMS
+
+      - name: Upload INT4 mobile package
+        uses: actions/upload-artifact@v4
+        with:
+          name: layaedge-model-int4-mobile
+          path: |
+            dist/laya-multilingual-int4-mobile.zip
+            dist/validation.json
+            dist/SHA256SUMS
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
 
       - name: Upload INT8 phone package
         uses: actions/upload-artifact@v4
@@ -56,6 +72,7 @@ jobs:
             dist/validation.json
             dist/SHA256SUMS
           compression-level: 0
+          retention-days: 30
           if-no-files-found: error
 
       - name: Upload FP32 reference package
@@ -67,4 +84,5 @@ jobs:
             dist/validation.json
             dist/SHA256SUMS
           compression-level: 0
+          retention-days: 14
           if-no-files-found: error

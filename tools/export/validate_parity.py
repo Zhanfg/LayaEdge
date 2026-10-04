@@ -162,6 +162,7 @@ def main():
     parser.add_argument("--model", default="convaiinnovations/laya-multilingual")
     parser.add_argument("--fp32", type=Path, required=True)
     parser.add_argument("--int8", type=Path)
+    parser.add_argument("--int4", type=Path)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
 
@@ -171,6 +172,8 @@ def main():
     }
     if args.int8:
         report["int8"] = validate(args.model, args.int8, strict=False)
+    if args.int4:
+        report["int4"] = validate(args.model, args.int4, strict=False)
 
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(
@@ -186,6 +189,11 @@ def main():
         raise SystemExit(
             "INT8 produced structurally invalid output: "
             + "; ".join(report["int8"]["failures"])
+        )
+    if "int4" in report and report["int4"]["failures"]:
+        raise SystemExit(
+            "INT4 produced structurally invalid output: "
+            + "; ".join(report["int4"]["failures"])
         )
 
 
