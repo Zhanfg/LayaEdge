@@ -27,7 +27,8 @@ jobs:
         run: |
           python -m pip install --no-cache-dir --upgrade pip
           python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --no-cache-dir "git+https://github.com/NandhaKishorM/laya.git@${LAYA_REF}#egg=laya[onnx]"
+          python -m pip install --no-cache-dir "git+https://github.com/NandhaKishorM/laya.git@${LAYA_REF}"
+          python -m pip install --no-cache-dir onnx onnxruntime onnxscript
 
       - name: Export and package
         run: |
