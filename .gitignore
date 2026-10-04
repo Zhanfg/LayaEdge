@@ -18,9 +18,15 @@ local.properties
 *.gguf
 model-cache/
 models/
+dist/
 
 # Benchmark output
 benchmark/results/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
 
 # Local
 .DS_Store
